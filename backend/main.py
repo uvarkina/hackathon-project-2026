@@ -13,6 +13,8 @@ import aiosqlite
 import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .analysis import analyze_voice
@@ -32,6 +34,7 @@ except Exception:
     _NLP_DIRECT = False
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "calls.db")
+FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 app = FastAPI(title="Guard Call — Audio Fraud Detection")
 
@@ -46,7 +49,7 @@ app.add_middleware(
 async def _nlp_direct(audio_base64: str) -> dict:
     """Вызов NLP-функций напрямую (без HTTP) — резерв когда порт 8001 не запущен."""
     audio_bytes = base64.b64decode(audio_base64)
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
         tmp.write(audio_bytes)
         tmp_path = tmp.name
     try:
@@ -69,36 +72,23 @@ async def _nlp_direct(audio_base64: str) -> dict:
         os.unlink(tmp_path)
 
 
-_DEFAULT_RESULT = {"text_score": 0.0, "transcript": "", "language": "unknown",
-                   "matched_phrases": [], "category": "none"}
-
 async def call_nlp_service(audio_base64: str) -> dict:
     """
     Сначала пробуем HTTP-сервис на порту 8001.
     Если не запущен — вызываем NLP-функции напрямую.
-    Все ошибки поглощаются — возвращаем дефолт вместо краша.
     """
-    # 1. HTTP к NLP-сервису
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{NLP_SERVICE_URL}/analyze_text",
-                json={"audio_base64": audio_base64, "file_extension": "wav"},
+                json={"audio_base64": audio_base64, "file_extension": "webm"},
             )
-            if response.status_code == 200:
-                return response.json()
-            print(f"[NLP HTTP] status {response.status_code}: {response.text[:120]}")
-    except Exception as e:
-        print(f"[NLP HTTP] unavailable: {e}")
-
-    # 2. Прямой вызов модулей
-    if _NLP_DIRECT:
-        try:
+            return response.json()
+    except Exception:
+        if _NLP_DIRECT:
             return await _nlp_direct(audio_base64)
-        except Exception as e:
-            print(f"[NLP DIRECT] failed: {e}")
-
-    return dict(_DEFAULT_RESULT)
+        return {"text_score": 0.0, "transcript": "", "language": "unknown",
+                "matched_phrases": [], "category": "none"}
 
 
 # Shared alert state per active WebSocket connection
@@ -172,6 +162,10 @@ def send_fraud_alert(matched_phrases: list, transcript: str):
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+async def serve_frontend():
+    return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -236,7 +230,6 @@ async def websocket_stream(websocket: WebSocket):
     session_max_score = 0.0
     session_transcript = ""
     session_phrases: list = []
-    session_hits = 0  # суммарное кол-во срабатываний (включая повторы)
 
     try:
         while True:
@@ -248,49 +241,25 @@ async def websocket_stream(websocket: WebSocket):
             except Exception:
                 audio_bytes = data.encode()
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
 
             try:
-                text_result = await call_nlp_service(data)
-            except Exception as e:
-                print(f"[WS] call_nlp_service unexpected error: {e}")
-                text_result = dict(_DEFAULT_RESULT)
+                voice_result, text_result = await asyncio.gather(
+                    analyze_voice(tmp_path),       # local: librosa features
+                    call_nlp_service(data),         # Participant 2: Whisper + fraud phrases
+                )
             finally:
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
+                os.unlink(tmp_path)
 
+            voice_score = float(voice_result.get("score", 0.5))
             text_score = float(text_result.get("text_score", 0.0))
-            transcript = text_result.get("transcript", "")
-
-            # Накапливаем фразы и суммарные срабатывания
-            matched = text_result.get("matched_phrases", [])
-            for p in matched:
-                if p not in session_phrases:
-                    session_phrases.append(p)
-            session_hits += len(matched)  # каждое срабатывание считается
-
-            # Session score: растёт по hits (каждое упоминание фразы = +)
-            h = session_hits
-            if h == 0:    session_score = 0.0
-            elif h == 1:  session_score = 0.40
-            elif h == 2:  session_score = 0.52
-            elif h == 3:  session_score = 0.62
-            elif h == 4:  session_score = 0.70
-            elif h == 5:  session_score = 0.76
-            elif h == 6:  session_score = 0.82
-            elif h == 7:  session_score = 0.87
-            elif h == 8:  session_score = 0.91
-            elif h == 9:  session_score = 0.94
-            else:         session_score = min(0.94 + (h - 9) * 0.01, 0.99)
-
-            final_score = round(max(text_score, session_score), 4)
-            print(f"[WS] hits={h} unique={len(session_phrases)} final={final_score} | '{transcript[:50]}'")
+            final_score = round(voice_score * 0.6 + text_score * 0.4, 4)
             level = get_threat_level(final_score)
 
+            matched = text_result.get("matched_phrases", [])
+            transcript = text_result.get("transcript", "")
             language = text_result.get("language", "unknown")
             category = text_result.get("category", "none")
 
@@ -298,6 +267,9 @@ async def websocket_stream(websocket: WebSocket):
             session_max_score = max(session_max_score, final_score)
             if transcript:
                 session_transcript = transcript
+            for p in matched:
+                if p not in session_phrases:
+                    session_phrases.append(p)
 
             # Alert logic: trigger after 2 consecutive windows above 0.9
             if final_score > 0.9:
@@ -310,6 +282,7 @@ async def websocket_stream(websocket: WebSocket):
                 send_fraud_alert(matched, transcript)
 
             await websocket.send_json({
+                "voice_score": voice_score,
                 "text_score": text_score,
                 "final_score": final_score,
                 "level": level,
@@ -322,8 +295,6 @@ async def websocket_stream(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"[WS] handler crashed: {e}")
     finally:
         _alert_states.pop(conn_id, None)
         duration = int(time.time() - session_start)

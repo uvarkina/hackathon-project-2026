@@ -1,7 +1,5 @@
 fastapi
-"uvicorn[standard]"
-websockets
-python-multipart
+uvicorn
 librosa
 numpy
 faster-whisper
@@ -11,3 +9,4 @@ aiosqlite
 httpx
 transformers
 python-dotenv
+python-multipart

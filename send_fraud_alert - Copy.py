@@ -4,7 +4,7 @@ from twilio.rest import Client
 def send_fraud_alert(victim_name: str, to_phone: str, matched_phrases: list[str]) -> str:
     # Ключи Twilio
     account_sid = "AC7ebd5dce356d00cd185e6dfd1e50aa8b"
-    auth_token = "TWILIO_AUTH_TOKEN"
+    auth_token = "edf034243b08847dbc15ff1cd4749fee"
     from_number = "+14155238886"
 
     phrases_text = ", ".join(matched_phrases)
@@ -27,7 +27,7 @@ def send_fraud_alert(victim_name: str, to_phone: str, matched_phrases: list[str]
 
 
 if __name__ == "__main__":
-    MY_NUMBER = "+972508187321" 
+    MY_NUMBER = "+972537158722" 
     
     print("Sending test fraud alert...")
     

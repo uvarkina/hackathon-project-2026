@@ -1,102 +1,77 @@
 """
-Analysis module - Voice and text fraud detection pipelines.
+Analysis module - Voice fraud detection pipeline.
+Uses calibrated algorithm from check_audio.py (Participant 1).
 """
-import json
-from pathlib import Path
+import warnings
+import os
 
-import numpy as np
-
-_PHRASES_PATH = Path(__file__).resolve().parent.parent / "data" / "phrases.json"
-
-
-def _load_phrases() -> dict:
-    """Load fraud phrases: {"he": [...], "ru": [...]}"""
-    try:
-        with open(_PHRASES_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        if "he" in data or "ru" in data:
-            return {
-                lang: [p.lower() for p in phrases]
-                for lang, phrases in data.items()
-                if isinstance(phrases, list)
-            }
-        flat = [p.lower() for p in data.get("verification_phrases", [])]
-        return {"en": flat}
-    except FileNotFoundError:
-        return {}
-
-
-FRAUD_PHRASES = _load_phrases()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+warnings.filterwarnings("ignore")
 
 
 async def analyze_voice(audio_path: str) -> dict:
     """
-    Analyze audio for signs of synthetic/cloned speech.
-    Returns {"score": float}  — 0.0 (natural) to 1.0 (synthetic)
+    Detect if audio is AI-generated or real human voice.
+    Returns {"score": float}  — 0.0 (real human) to 1.0 (AI-generated)
+
+    Algorithm by Participant 1 (check_audio.py):
+    - Pitch stability (f0 std, range) — AI voices have unnatural pitch
+    - MFCC variance — AI voices have less variation
+    - Spectral bandwidth — AI voices have narrower bandwidth
     """
     try:
         import librosa
+        import numpy as np
 
-        y, sr = librosa.load(audio_path, sr=16000)
+        # Load audio — try soundfile first, fall back to librosa
+        try:
+            import soundfile as sf
+            waveform, sr = sf.read(audio_path, dtype="float32", always_2d=False)
+            sr = int(sr)
+        except Exception:
+            waveform, sr = librosa.load(audio_path, sr=None, mono=True)
+            sr = int(sr)
 
-        spectral_flatness = float(np.mean(librosa.feature.spectral_flatness(y=y)))
-        zcr = librosa.feature.zero_crossing_rate(y)
-        zcr_std = float(np.std(zcr))
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        # Normalize to mono and 16kHz
+        if waveform.ndim > 1:
+            waveform = waveform.mean(axis=1)
+        if sr != 16000:
+            waveform = librosa.resample(
+                waveform.astype(np.float32),
+                orig_sr=sr, target_sr=16000
+            )
+            sr = 16000
+
+        # Feature 1: Pitch analysis — AI voices have unnaturally stable pitch
+        f0, _, _ = librosa.pyin(waveform, fmin=60, fmax=400, sr=sr, frame_length=2048)
+        f0_valid = f0[~np.isnan(f0)] if f0 is not None else np.array([])
+        if len(f0_valid) > 5:
+            f0_std = float(np.std(f0_valid))
+            f0_range = float(np.ptp(f0_valid))
+            pitch_score = max(0.0, min(1.0, 1.0 - (f0_std - 20) / 50.0))
+            range_score = max(0.0, min(1.0, 1.0 - (f0_range - 100) / 250.0))
+        else:
+            pitch_score, range_score = 0.5, 0.5
+
+        # Feature 2: MFCC variance — AI voices have less variation
+        mfccs = librosa.feature.mfcc(y=waveform, sr=sr, n_mfcc=13)
         mfcc_var = float(np.mean(np.var(mfccs, axis=1)))
+        mfcc_score = max(0.0, min(1.0, (mfcc_var - 1500) / 1500.0))
 
-        flatness_score = min(spectral_flatness * 10, 1.0)
-        variance_penalty = max(0.0, 1.0 - mfcc_var / 50.0)
-        zcr_score = max(0.0, 1.0 - zcr_std * 20)
+        # Feature 3: Spectral bandwidth — AI voices have narrower spectrum
+        bw = librosa.feature.spectral_bandwidth(y=waveform, sr=sr)[0]
+        bw_std = float(np.std(bw))
+        bw_score = max(0.0, min(1.0, (bw_std - 350) / 400.0))
 
-        voice_score = round(
-            flatness_score * 0.4 + variance_penalty * 0.35 + zcr_score * 0.25, 4
+        # Weighted combination (calibrated by Participant 1)
+        ai_prob = (
+            pitch_score * 0.40 +
+            range_score * 0.25 +
+            mfcc_score  * 0.25 +
+            bw_score    * 0.10
         )
-        return {"score": min(max(voice_score, 0.0), 1.0)}
+        score = round(max(0.0, min(1.0, ai_prob)), 4)
+        return {"score": score}
 
     except Exception:
         return {"score": 0.5}
-
-
-async def analyze_text(audio_path: str) -> dict:
-    """
-    Transcribe audio and check for known fraud phrases.
-    Returns {"score": float, "transcript": str, "language": str, "matched_phrases": list}
-    """
-    try:
-        from faster_whisper import WhisperModel
-
-        model = WhisperModel("tiny", compute_type="int8")
-        segments, info = model.transcribe(audio_path, language=None)
-        transcript = " ".join(seg.text for seg in segments).strip()
-        language = getattr(info, "language", "unknown")
-    except Exception:
-        return {"score": 0.0, "transcript": "", "language": "unknown", "matched_phrases": []}
-
-    transcript_lower = transcript.lower()
-    matched: list = []
-
-    phrases_to_check = FRAUD_PHRASES.get(language, [])
-    if phrases_to_check:
-        for phrase in phrases_to_check:
-            if phrase in transcript_lower:
-                matched.append(phrase)
-    else:
-        for phrases in FRAUD_PHRASES.values():
-            for phrase in phrases:
-                if phrase in transcript_lower and phrase not in matched:
-                    matched.append(phrase)
-
-    if len(matched) == 0:
-        score = 0.0
-    elif len(matched) == 1:
-        score = 0.6
-    else:
-        score = min(0.85 + (len(matched) - 2) * 0.05, 1.0)
-
-    return {
-        "score": score,
-        "transcript": transcript,
-        "language": language,
-        "matched_phrases": matched,
-    }
