@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from difflib import SequenceMatcher
 
 from transformers import pipeline
 
@@ -43,6 +44,10 @@ CATEGORY_KEYWORDS = {
 # Lazy-loaded classifier
 _classifier = None
 
+def is_similar(str1, str2, threshold1=0.6):
+    # ratio() returns a float between 0.0 and 1.0
+    similarity = SequenceMatcher(None, str1, str2).ratio()
+    return similarity > threshold1
 
 def _get_classifier():
     """Lazy-load a multilingual zero-shot classification model (runs locally, free)."""
@@ -91,12 +96,15 @@ def _pattern_detection(transcript_text: str, language: str) -> dict:
     phrases_data = _load_phrases()
     phrases = phrases_data.get(language, [])
 
-    transcript_lower = transcript_text.lower()
+    transcript_lower = transcript_text.lower().split()
+    print(transcript_lower)
     matched_phrases = []
 
     for phrase in phrases:
-        if phrase.lower() in transcript_lower:
-            matched_phrases.append(phrase)
+        for forbidden_phares in transcript_lower:
+            if is_similar(phrase, forbidden_phares):
+        # if phrase.lower() in transcript_lower:
+                matched_phrases.append(phrase)
 
     # Score: 0 for no match, 0.6 for 1 match, 0.85 for 2+ matches
     if len(matched_phrases) == 0:
