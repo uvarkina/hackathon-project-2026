@@ -37,63 +37,98 @@ def _read_wav(file_path: str):
     return audio, frame_rate
 
 
+def _run_forced(model, audio_input, lang, extra_kwargs):
+    """Transcribe with a forced language. Returns (text, segments_list)."""
+    segs_gen, _ = model.transcribe(audio_input, language=lang, **extra_kwargs)
+    parts = []
+    segs_list = []
+    for seg in segs_gen:
+        t = seg.text.strip()
+        parts.append(t)
+        segs_list.append({
+            "start": round(seg.start, 3),
+            "end": round(seg.end, 3),
+            "text": t,
+        })
+    return " ".join(parts), segs_list
+
+
+def _has_hebrew(text: str) -> bool:
+    return any('֐' <= c <= '׿' for c in text)
+
+
+def _has_cyrillic(text: str) -> bool:
+    return any('Ѐ' <= c <= 'ӿ' for c in text)
+
+
 def transcribe_audio(audio_path: str) -> dict:
     """
     Transcribe a short audio clip (~3 seconds) using faster-whisper.
     Reads WAV directly via numpy — no ffmpeg required.
-    Auto-detects language between Hebrew ("he") and Russian ("ru").
+    Supports Hebrew ("he") and Russian ("ru") only.
+    Never outputs Arabic or other languages.
     """
     model = _get_model()
 
+    # Try to load WAV directly; fall back to file path (for mp3/webm)
     try:
-        audio_array, sr = _read_wav(audio_path)
-        segments_gen, info = model.transcribe(
-            audio_array,
+        audio_input, sr = _read_wav(audio_path)
+        base_kwargs = dict(
             sampling_rate=sr,
             beam_size=1,
-            language=None,          # авто-определение
-            vad_filter=True,        # пропускать тишину
+            vad_filter=True,
             no_speech_threshold=0.6,
             condition_on_previous_text=False,
         )
     except Exception:
-        segments_gen, info = model.transcribe(
-            audio_path,
+        audio_input = audio_path
+        base_kwargs = dict(
             beam_size=1,
-            language=None,
             vad_filter=True,
         )
 
-    detected_language = info.language if info.language in ("he", "ru") else "ru"
+    # ── Step 1: detect language without caring about transcription output ──
+    # We run auto-detect first just to know which of he/ru to force.
+    try:
+        _, info_detect = model.transcribe(
+            audio_input,
+            language=None,
+            **base_kwargs,
+        )
+        auto_lang = info_detect.language  # e.g. "he", "ru", "ar", "en" …
+    except Exception:
+        auto_lang = "he"
 
-    segments_list = []
-    full_text_parts = []
-
-    for segment in segments_gen:
-        segments_list.append({
-            "start": round(segment.start, 3),
-            "end": round(segment.end, 3),
-            "text": segment.text.strip(),
-        })
-        full_text_parts.append(segment.text.strip())
-
-    full_text = " ".join(full_text_parts)
-
-    # Filter hallucinations: if forced language is ru/he but text has no matching chars — discard
-    if detected_language == "ru":
-        has_script = any('Ѐ' <= c <= 'ӿ' for c in full_text)
-    elif detected_language == "he":
-        has_script = any('֐' <= c <= '׿' for c in full_text)
+    # Map auto-detected language to the one we support
+    if auto_lang == "ru":
+        force_lang = "ru"
     else:
-        has_script = True
+        # Hebrew, Arabic, Farsi, and other Semitic/Middle-Eastern languages
+        # all map to Hebrew — it's the primary language of our app
+        force_lang = "he"
 
-    if not has_script:
-        full_text = ""
-        segments_list = []
+    # ── Step 2: transcribe with the forced language ──
+    text, segments_list = _run_forced(model, audio_input, force_lang, base_kwargs)
+
+    # ── Step 3: script validation — if text doesn't match the script, discard ──
+    if force_lang == "he" and not _has_hebrew(text):
+        # Maybe it's actually Russian — try once more
+        text_ru, segs_ru = _run_forced(model, audio_input, "ru", base_kwargs)
+        if _has_cyrillic(text_ru):
+            return {"text": text_ru, "language": "ru", "segments": segs_ru}
+        # Nothing recognisable — return empty (silence / noise)
+        return {"text": "", "language": "he", "segments": []}
+
+    if force_lang == "ru" and not _has_cyrillic(text):
+        # Maybe it's Hebrew — try once more
+        text_he, segs_he = _run_forced(model, audio_input, "he", base_kwargs)
+        if _has_hebrew(text_he):
+            return {"text": text_he, "language": "he", "segments": segs_he}
+        return {"text": "", "language": "ru", "segments": []}
 
     return {
-        "text": full_text,
-        "language": detected_language,
+        "text": text,
+        "language": force_lang,
         "segments": segments_list,
     }
 
