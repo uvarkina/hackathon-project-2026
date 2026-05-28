@@ -1,14 +1,26 @@
 """
-Audio Fraud Detection System - FastAPI Backend (Stub Mode)
+Guard Call — FastAPI Backend
 """
 import asyncio
+import base64
 import json
-import random
+import os
+import tempfile
+import time
+from datetime import datetime
 
+import aiosqlite
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Audio Fraud Detection System")
+try:
+    from .analysis import analyze_voice, analyze_text
+except ImportError:
+    from analysis import analyze_voice, analyze_text
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "calls.db")
+
+app = FastAPI(title="Guard Call — Audio Fraud Detection")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,93 +30,214 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Stub phrases ---
-FRAUD_PHRASES = ["חשבון הבנק", "אל תגיד לאף אחד", "משטרה"]
+# Shared alert state per active WebSocket connection
+_alert_states: dict = {}
 
 
-# --- Stub analysis functions ---
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 
-async def analyze_voice() -> float:
-    """Stub: returns random voice fraud score between 0.3 and 0.9."""
-    await asyncio.sleep(0.1)  # simulate processing
-    return round(random.uniform(0.3, 0.9), 4)
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS calls (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp       TEXT    NOT NULL,
+                duration_sec    INTEGER NOT NULL,
+                max_score       REAL    NOT NULL,
+                level           TEXT    NOT NULL,
+                matched_phrases TEXT    NOT NULL,
+                transcript      TEXT    NOT NULL
+            )
+        """)
+        await db.commit()
 
 
-async def analyze_text() -> dict:
-    """Stub: returns random text score and a random matched phrase."""
-    await asyncio.sleep(0.1)  # simulate processing
-    score = round(random.uniform(0.2, 0.8), 4)
-    phrase = random.choice(FRAUD_PHRASES)
-    return {
-        "score": score,
-        "matched_phrases": [phrase],
-        "transcript": f"...{phrase}...",
-    }
+async def save_call(duration_sec: int, max_score: float, level: str,
+                    matched_phrases: list, transcript: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO calls
+               (timestamp, duration_sec, max_score, level, matched_phrases, transcript)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                datetime.utcnow().isoformat(),
+                duration_sec,
+                round(max_score, 4),
+                level,
+                json.dumps(matched_phrases, ensure_ascii=False),
+                transcript,
+            ),
+        )
+        await db.commit()
 
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def get_threat_level(score: float) -> str:
-    """Determine threat level from final score."""
-    if score > 0.75:
+    if score > 0.9:
+        return "alert"
+    elif score > 0.7:
         return "danger"
     elif score >= 0.4:
         return "warning"
     return "safe"
 
 
-# --- Endpoints ---
+def send_fraud_alert(matched_phrases: list, transcript: str):
+    """Stub — Participant 5 replaces this with Twilio."""
+    print(f"[FRAUD ALERT] Phrases: {matched_phrases} | '{transcript[:80]}'")
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/history")
+async def get_history():
+    """Return last 20 call sessions from the database."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM calls ORDER BY id DESC LIMIT 20"
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+    return [
+        {
+            "id": row["id"],
+            "timestamp": row["timestamp"],
+            "duration_sec": row["duration_sec"],
+            "max_score": row["max_score"],
+            "level": row["level"],
+            "matched_phrases": json.loads(row["matched_phrases"]),
+            "transcript": row["transcript"],
+        }
+        for row in rows
+    ]
+
+
+@app.post("/cancel_alert")
+async def cancel_alert():
+    """Reset alert counter for all active connections (false-positive button)."""
+    for state in _alert_states.values():
+        state["consecutive_high"] = 0
+        state["alert_sent"] = False
+    return {"status": "alert cancelled"}
+
+
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket):
     """
-    WebSocket endpoint for real-time audio fraud detection.
-
-    Accepts connection, then every 3 seconds runs voice + text analysis
-    in parallel and sends back a JSON result.
-
-    Response format:
+    Accepts base64-encoded audio every 3 seconds.
+    Returns JSON:
     {
         "voice_score": 0.72,
-        "text_score": 0.55,
-        "final_score": 0.65,
-        "level": "warning",
-        "matched_phrases": ["חשבון הבנק"],
-        "transcript": "...חשבון הבנק..."
+        "text_score": 0.60,
+        "final_score": 0.67,
+        "level": "warning",         # safe / warning / danger / alert
+        "matched_phrases": [...],
+        "transcript": "...",
+        "language": "he",
+        "alert_sent": false
     }
     """
     await websocket.accept()
 
+    conn_id = id(websocket)
+    state = {"consecutive_high": 0, "alert_sent": False}
+    _alert_states[conn_id] = state
+
+    session_start = time.time()
+    session_max_score = 0.0
+    session_transcript = ""
+    session_phrases: list = []
+
     try:
         while True:
-            # Wait for audio chunk from client (base64 string or any message)
             data = await websocket.receive_text()
 
-            # Run voice and text analysis in parallel (stubs)
-            voice_score, text_result = await asyncio.gather(
-                analyze_voice(),
-                analyze_text(),
-            )
+            # Decode base64 audio to a temporary file
+            try:
+                audio_bytes = base64.b64decode(data)
+            except Exception:
+                audio_bytes = data.encode()
 
-            text_score = text_result["score"]
+            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+
+            try:
+                voice_result, text_result = await asyncio.gather(
+                    analyze_voice(tmp_path),
+                    analyze_text(tmp_path),
+                )
+            finally:
+                os.unlink(tmp_path)
+
+            voice_score = float(voice_result.get("score", 0.5))
+            text_score = float(text_result.get("score", 0.0))
             final_score = round(voice_score * 0.6 + text_score * 0.4, 4)
+            level = get_threat_level(final_score)
 
-            response = {
+            matched = text_result.get("matched_phrases", [])
+            transcript = text_result.get("transcript", "")
+            language = text_result.get("language", "unknown")
+
+            # Update session stats
+            session_max_score = max(session_max_score, final_score)
+            if transcript:
+                session_transcript = transcript
+            for p in matched:
+                if p not in session_phrases:
+                    session_phrases.append(p)
+
+            # Alert logic: trigger after 2 consecutive windows above 0.9
+            if final_score > 0.9:
+                state["consecutive_high"] += 1
+            else:
+                state["consecutive_high"] = 0
+
+            if state["consecutive_high"] >= 2 and not state["alert_sent"]:
+                state["alert_sent"] = True
+                send_fraud_alert(matched, transcript)
+
+            await websocket.send_json({
                 "voice_score": voice_score,
                 "text_score": text_score,
                 "final_score": final_score,
-                "level": get_threat_level(final_score),
-                "matched_phrases": text_result["matched_phrases"],
-                "transcript": text_result["transcript"],
-            }
-
-            await websocket.send_json(response)
+                "level": level,
+                "matched_phrases": matched,
+                "transcript": transcript,
+                "language": language,
+                "alert_sent": state["alert_sent"],
+            })
 
     except WebSocketDisconnect:
         pass
+    finally:
+        _alert_states.pop(conn_id, None)
+        duration = int(time.time() - session_start)
+        await save_call(
+            duration,
+            session_max_score,
+            get_threat_level(session_max_score),
+            session_phrases,
+            session_transcript,
+        )
 
 
 if __name__ == "__main__":
