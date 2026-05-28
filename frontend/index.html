@@ -698,6 +698,38 @@
     .conn-badge.live  { background: rgba(26,158,110,0.2); color: #4ade80; }
     .conn-badge.error { background: rgba(217,48,48,0.2);  color: #f87171; }
 
+    /* score breakdown pills */
+    .score-breakdown {
+      display: flex;
+      gap: 8px;
+      margin: 0 16px 10px;
+    }
+    .score-pill {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 12px;
+      padding: 8px 12px;
+    }
+    .score-pill-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.4);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .score-pill-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: white;
+      transition: color 0.4s;
+    }
+    .score-pill-value.high { color: #ef4444; }
+    .score-pill-value.mid  { color: #f4b740; }
+    .score-pill-value.low  { color: #4ade80; }
+
     /* responsive */
     @media (max-width: 900px) {
       .page { grid-template-columns: 1fr; }
@@ -857,6 +889,18 @@
           </div>
           <div class="transcript-scroll" id="transcriptEl">
             Press Start to begin monitoring…
+          </div>
+        </div>
+
+        <!-- AI score breakdown -->
+        <div class="score-breakdown">
+          <div class="score-pill">
+            <span class="score-pill-label">🤖 AI голос</span>
+            <span class="score-pill-value low" id="voiceScoreEl">—</span>
+          </div>
+          <div class="score-pill">
+            <span class="score-pill-label">📝 Фразы</span>
+            <span class="score-pill-value low" id="textScoreEl">—</span>
           </div>
         </div>
 
@@ -1163,6 +1207,17 @@
         };
 
         renderUI(score, level, null, null, titleMap[level], detected, actionMap[level], null, level === "alert", level === "danger" || level === "alert");
+
+        // AI score breakdown
+        function setPill(id, value) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const pct = Math.round(value * 100);
+          el.textContent = pct + "%";
+          el.className = "score-pill-value " + (pct >= 70 ? "high" : pct >= 40 ? "mid" : "low");
+        }
+        if (d.voice_score != null) setPill("voiceScoreEl", d.voice_score);
+        if (d.text_score  != null) setPill("textScoreEl",  d.text_score);
       } catch(e) { console.warn(e); }
     };
   }
