@@ -97,14 +97,13 @@ def _pattern_detection(transcript_text: str, language: str) -> dict:
     phrases = phrases_data.get(language, [])
 
     transcript_lower = transcript_text.lower().split()
-    print(transcript_lower)
     matched_phrases = []
 
     for phrase in phrases:
         for forbidden_phares in transcript_lower:
             if is_similar(phrase, forbidden_phares):
         # if phrase.lower() in transcript_lower:
-                matched_phrases.append(phrase)
+                matched_phrases.append(forbidden_phares)
 
     # Score: 0 for no match, 0.6 for 1 match, 0.85 for 2+ matches
     if len(matched_phrases) == 0:
