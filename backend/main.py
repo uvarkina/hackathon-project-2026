@@ -10,13 +10,16 @@ import time
 from datetime import datetime
 
 import aiosqlite
+import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
-    from .analysis import analyze_voice, analyze_text
+    from .analysis import analyze_voice
 except ImportError:
-    from analysis import analyze_voice, analyze_text
+    from analysis import analyze_voice
+
+NLP_SERVICE_URL = "http://localhost:8001"
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "calls.db")
 
@@ -29,6 +32,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+async def call_nlp_service(audio_base64: str) -> dict:
+    """Call Participant 2's NLP service for transcription + fraud phrase detection."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{NLP_SERVICE_URL}/analyze_text",
+                json={"audio_base64": audio_base64, "file_extension": "webm"},
+            )
+            return response.json()
+    except Exception:
+        return {"text_score": 0.0, "transcript": "", "language": "unknown",
+                "matched_phrases": [], "category": "none"}
+
 
 # Shared alert state per active WebSocket connection
 _alert_states: dict = {}
@@ -182,8 +199,8 @@ async def websocket_stream(websocket: WebSocket):
 
             try:
                 voice_result, text_result = await asyncio.gather(
-                    analyze_voice(tmp_path),
-                    analyze_text(tmp_path),
+                    analyze_voice(tmp_path),       # local: librosa features
+                    call_nlp_service(data),         # Participant 2: Whisper + fraud phrases
                 )
             finally:
                 os.unlink(tmp_path)
@@ -196,6 +213,7 @@ async def websocket_stream(websocket: WebSocket):
             matched = text_result.get("matched_phrases", [])
             transcript = text_result.get("transcript", "")
             language = text_result.get("language", "unknown")
+            category = text_result.get("category", "none")
 
             # Update session stats
             session_max_score = max(session_max_score, final_score)
@@ -223,6 +241,7 @@ async def websocket_stream(websocket: WebSocket):
                 "matched_phrases": matched,
                 "transcript": transcript,
                 "language": language,
+                "category": category,
                 "alert_sent": state["alert_sent"],
             })
 

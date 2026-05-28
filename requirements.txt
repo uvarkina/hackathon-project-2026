@@ -6,3 +6,6 @@ faster-whisper
 scikit-learn
 twilio
 aiosqlite
+httpx
+transformers
+python-dotenv
