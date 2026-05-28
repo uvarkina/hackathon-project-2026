@@ -1,52 +1,70 @@
+import wave
+import numpy as np
 from faster_whisper import WhisperModel
 from dotenv import load_dotenv
 load_dotenv()
 
-
-# Load model once at module level for efficiency across multiple calls
 _model = None
 
 
 def _get_model():
-    """Lazy-load the Whisper model (tiny) on first use."""
     global _model
     if _model is None:
         _model = WhisperModel("tiny", device="cpu", compute_type="int8")
     return _model
 
 
+def _read_wav(file_path: str):
+    """Read a WAV file without ffmpeg using Python stdlib wave module.
+    Returns (float32 numpy array at original sample rate, sample_rate)."""
+    with wave.open(file_path, "rb") as wf:
+        n_channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        frame_rate = wf.getframerate()
+        raw = wf.readframes(wf.getnframes())
+
+    if sample_width == 2:
+        audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    elif sample_width == 4:
+        audio = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
+    else:
+        audio = np.frombuffer(raw, dtype=np.float32)
+
+    # take first channel if stereo
+    if n_channels > 1:
+        audio = audio[::n_channels]
+
+    return audio, frame_rate
+
+
 def transcribe_audio(audio_path: str) -> dict:
     """
     Transcribe a short audio clip (~3 seconds) using faster-whisper.
-
+    Reads WAV directly via numpy — no ffmpeg required.
     Auto-detects language between Hebrew ("he") and Russian ("ru").
-
-    Args:
-        audio_path: Path to the audio file (wav, mp3, etc.)
-
-    Returns:
-        dict with keys:
-            - text: Full transcribed text
-            - language: Detected language code ("he" or "ru")
-            - segments: List of segment dicts with start, end, and text
     """
     model = _get_model()
 
-    segments_gen, info = model.transcribe(
-        audio_path,
-        beam_size=1,              # faster for short clips
-        language=None,            # auto-detect
-        vad_filter=False,         # skip VAD for 3-second clips
-    )
+    try:
+        audio_array, sr = _read_wav(audio_path)
+        segments_gen, info = model.transcribe(
+            audio_array,
+            sampling_rate=sr,
+            beam_size=1,
+            language=None,          # авто-определение
+            vad_filter=True,        # пропускать тишину
+            no_speech_threshold=0.6,
+            condition_on_previous_text=False,
+        )
+    except Exception:
+        segments_gen, info = model.transcribe(
+            audio_path,
+            beam_size=1,
+            language=None,
+            vad_filter=True,
+        )
 
-    detected_language = info.language  # e.g. "he", "ru", "en"
-
-    # Constrain to expected languages
-    if detected_language not in ("he", "ru"):
-        # Default to the higher-probability one from detection
-        he_prob = info.language_probability if detected_language == "he" else 0.0
-        ru_prob = info.language_probability if detected_language == "ru" else 0.0
-        detected_language = "he" if he_prob >= ru_prob else detected_language
+    detected_language = info.language if info.language in ("he", "ru") else "ru"
 
     segments_list = []
     full_text_parts = []
@@ -61,6 +79,18 @@ def transcribe_audio(audio_path: str) -> dict:
 
     full_text = " ".join(full_text_parts)
 
+    # Filter hallucinations: if forced language is ru/he but text has no matching chars — discard
+    if detected_language == "ru":
+        has_script = any('Ѐ' <= c <= 'ӿ' for c in full_text)
+    elif detected_language == "he":
+        has_script = any('֐' <= c <= '׿' for c in full_text)
+    else:
+        has_script = True
+
+    if not has_script:
+        full_text = ""
+        segments_list = []
+
     return {
         "text": full_text,
         "language": detected_language,
@@ -69,10 +99,6 @@ def transcribe_audio(audio_path: str) -> dict:
 
 
 if __name__ == "__main__":
-    import sys
-
-
-    result = transcribe_audio('hebrew_3_ai.mp3')
+    result = transcribe_audio("hebrew_3_ai.mp3")
     print(f"Language: {result['language']}")
     print(f"Text: {result['text']}")
-    print(f"Segments: {result['segments']}")

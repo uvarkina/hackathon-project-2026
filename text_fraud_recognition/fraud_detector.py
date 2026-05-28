@@ -44,10 +44,34 @@ CATEGORY_KEYWORDS = {
 # Lazy-loaded classifier
 _classifier = None
 
+def _normalize(text: str) -> str:
+    """Нормализация: строчные + ё→е (Whisper часто пишет е вместо ё)."""
+    return text.lower().replace("ё", "е").replace("Ё", "е")
+
 def is_similar(str1, str2, threshold1=0.6):
-    # ratio() returns a float between 0.0 and 1.0
     similarity = SequenceMatcher(None, str1, str2).ratio()
     return similarity > threshold1
+
+def _phrase_matches(phrase: str, transcript: str) -> bool:
+    """
+    Проверяет входит ли фраза в транскрипт.
+    1. Точное вхождение (после нормализации)
+    2. Пословное: ≥60% ключевых слов фразы (len>3) найдены в транскрипте
+       по первым 5 символам — чтобы "переведите" совпало с "перевести".
+    """
+    p = _normalize(phrase)
+    t = _normalize(transcript)
+
+    if p in t:
+        return True
+
+    p_words = p.split()
+    key_words = [w for w in p_words if len(w) > 3]
+    if not key_words:
+        return False
+
+    matched = sum(1 for w in key_words if w[:5] in t)
+    return matched / len(key_words) >= 0.6
 
 def _get_classifier():
     """Lazy-load a multilingual zero-shot classification model (runs locally, free)."""
@@ -96,22 +120,20 @@ def _pattern_detection(transcript_text: str, language: str) -> dict:
     phrases_data = _load_phrases()
     phrases = phrases_data.get(language, [])
 
-    transcript_lower = transcript_text.lower().split()
     matched_phrases = []
 
     for phrase in phrases:
-        for forbidden_phares in transcript_lower:
-            if is_similar(phrase, forbidden_phares):
-        # if phrase.lower() in transcript_lower:
-                matched_phrases.append(forbidden_phares)
+        if _phrase_matches(phrase, transcript_text):
+            matched_phrases.append(phrase)
 
-    # Score: 0 for no match, 0.6 for 1 match, 0.85 for 2+ matches
-    if len(matched_phrases) == 0:
-        pattern_score = 0.0
-    elif len(matched_phrases) == 1:
-        pattern_score = 0.6
-    else:
-        pattern_score = 0.85
+    # Score растёт с каждой новой совпавшей фразой
+    n = len(matched_phrases)
+    if n == 0:   pattern_score = 0.0
+    elif n == 1: pattern_score = 0.45
+    elif n == 2: pattern_score = 0.62
+    elif n == 3: pattern_score = 0.74
+    elif n == 4: pattern_score = 0.84
+    else:        pattern_score = min(0.84 + (n - 4) * 0.04, 0.97)
 
     category = _detect_category(matched_phrases, language) if matched_phrases else "none"
 
@@ -205,13 +227,9 @@ def check_fraud_phrases(transcript_text: str, language: str) -> dict:
     pattern_score = pattern_result["pattern_score"]
     ai_score = ai_result["ai_score"]
 
-    combined_score = round(0.4 * pattern_score + 0.6 * ai_score, 2)
-
-    # If pattern matched strongly, ensure minimum score
-    if pattern_score >= 0.85:
-        combined_score = max(combined_score, 0.75)
-    elif pattern_score >= 0.6:
-        combined_score = max(combined_score, 0.5)
+    # Без PyTorch ai_score = 0, поэтому score = pattern_score напрямую
+    combined_score = round(pattern_score + 0.4 * ai_score, 2)
+    combined_score = min(combined_score, 0.97)
 
     # Determine final category (prefer pattern category if phrases matched)
     if pattern_result["matched_phrases"]:
