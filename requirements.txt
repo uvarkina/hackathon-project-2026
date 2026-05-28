@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+librosa
+numpy
+faster-whisper
+scikit-learn
+twilio
+aiosqlite
