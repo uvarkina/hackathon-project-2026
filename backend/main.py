@@ -164,7 +164,7 @@ def send_fraud_alert(matched_phrases: list, transcript: str):
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse(os.path.join(FRONTEND_PATH, "guard_call.html"))
+    return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
 
 @app.get("/health")
 async def health_check():
