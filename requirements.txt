@@ -1,0 +1,13 @@
+fastapi
+"uvicorn[standard]"
+websockets
+python-multipart
+librosa
+numpy
+faster-whisper
+scikit-learn
+twilio
+aiosqlite
+httpx
+transformers
+python-dotenv

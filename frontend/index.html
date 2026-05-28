@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guard Call</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --beige: #ede8df;
+      --beige-card: #ffffff;
+      --text-dark: #111111;
+      --text-mid: #555555;
+      --text-light: #888888;
+      --green: #1a9e6e;
+      --green-bg: #e6f5ef;
+      --yellow: #c8860a;
+      --yellow-bg: #fef9ec;
+      --yellow-border: #f4d87a;
+      --red: #d93030;
+      --red-bg: #fdf2f2;
+      --red-border: #f5b8b8;
+      --phone-bg: #10131a;
+      --phone-surface: #191d28;
+      --phone-border: rgba(255,255,255,0.07);
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--beige);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      display: flex;
+      align-items: stretch;
+    }
+
+    /* ── Layout ── */
+    .page {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    /* ── LEFT PANEL ── */
+    .left {
+      background: var(--beige);
+      padding: 48px 56px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow-y: auto;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 48px;
+    }
+
+    .logo-icon {
+      width: 48px; height: 48px;
+      background: #111;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .logo-text h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-dark);
+      line-height: 1.1;
+    }
+
+    .logo-text p {
+      font-size: 13px;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      margin-bottom: 20px;
+    }
+
+    .hero-title {
+      font-size: clamp(34px, 3.8vw, 52px);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      color: var(--text-dark);
+      margin-bottom: 24px;
+    }
+
+    .hero-desc {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-mid);
+      max-width: 480px;
+      margin-bottom: 40px;
+    }
+
+    /* feature cards */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .feat-card {
+      background: var(--beige-card);
+      border-radius: 18px;
+      padding: 20px 16px;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+
+    .feat-icon {
+      font-size: 20px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .feat-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-dark);
+      margin-bottom: 6px;
+    }
+
+    .feat-card p {
+      font-size: 12px;
+      color: var(--text-light);
+      line-height: 1.5;
+    }
+
+    /* scenario tabs */
+    .scenario-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(0,0,0,0.12);
+      background: transparent;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-mid);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.4;
+    }
+
+    .tab-btn.active {
+      background: var(--text-dark);
+      border-color: var(--text-dark);
+      color: white;
+    }
+
+    .tab-btn.active .dot { opacity: 1; }
+    .tab-btn.tab-normal.active  { --dot-color: #1a9e6e; }
+    .tab-btn.tab-normal.active .dot  { background: #1a9e6e; }
+    .tab-btn.tab-warn.active .dot    { background: #f4b740; }
+    .tab-btn.tab-danger.active .dot  { background: #ef4444; }
+
+    .tab-btn.tab-live {
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .tab-btn.tab-live.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: white;
+    }
+    .tab-btn.tab-live .dot { background: var(--green); opacity: 1; }
+
+    /* pitch box */
+    .pitch-box {
+      background: #111;
+      border-radius: 20px;
+      padding: 28px 28px;
+      color: white;
+    }
+
+    .pitch-box .pitch-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 14px;
+    }
+
+    .pitch-box p {
+      font-size: 15px;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.82);
+    }
+
+    /* server input */
+    .server-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .server-row label {
+      font-size: 12px;
+      color: var(--text-light);
+      white-space: nowrap;
+    }
+
+    .server-row input {
+      flex: 1;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--text-dark);
+      padding: 7px 10px;
+      outline: none;
+    }
+
+    /* ── RIGHT PANEL ── */
+    .right {
+      background: #d8d2c8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+      min-height: 100vh;
+    }
+
+    /* Phone shell */
+    .phone-shell {
+      width: min(400px, 100%);
+      background: #0a0c12;
+      border-radius: 52px;
+      padding: 13px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.08),
+        0 40px 100px rgba(0,0,0,0.5);
+      position: relative;
+    }
+
+    .phone-shell.danger-ring {
+      box-shadow:
+        0 0 0 2px rgba(239,68,68,0.7),
+        0 0 0 6px rgba(239,68,68,0.15),
+        0 40px 100px rgba(0,0,0,0.5);
+      animation: ring-pulse 1.2s ease infinite;
+    }
+
+    @keyframes ring-pulse {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(239,68,68,0.7), 0 0 0 6px rgba(239,68,68,0.12), 0 40px 100px rgba(0,0,0,0.5); }
+      50%       { box-shadow: 0 0 0 2px rgba(239,68,68,0.9), 0 0 0 10px rgba(239,68,68,0.18), 0 40px 100px rgba(0,0,0,0.5); }
+    }
+
+    .phone-screen {
+      background: var(--phone-bg);
+      border-radius: 38px;
+      overflow: hidden;
+      position: relative;
+      min-height: 760px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .phone-screen .call-bar {
+      margin-top: auto;
+    }
+
+    /* notch */
+    .notch {
+      width: 110px; height: 30px;
+      background: #0a0c12;
+      border-radius: 0 0 20px 20px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 24px 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .status-icons { display: flex; align-items: center; gap: 6px; }
+
+    /* top pills */
+    .top-pills {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 18px;
+      gap: 8px;
+    }
+
+    .top-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.09);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      font-weight: 500;
+    }
+
+    /* caller info */
+    .caller-section {
+      text-align: center;
+      padding: 32px 20px 24px;
+    }
+
+    .caller-avatar {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      background: #2a2e3d;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.7);
+      border: 2px solid rgba(255,255,255,0.08);
+    }
+
+    .caller-name {
+      font-size: 26px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -0.02em;
+      margin-bottom: 5px;
+    }
+
+    .caller-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 10px;
+    }
+
+    .call-timer {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+    }
+
+    .call-timer-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #1a9e6e;
+    }
+
+    /* transcript bar */
+    .transcript-bar {
+      margin: 12px 16px 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 10px 14px;
+      overflow: hidden;
+    }
+
+    .transcript-bar-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .transcript-bar-label .tl-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #1a9e6e;
+    }
+
+    .transcript-bar-label .tl-dot.inactive { background: rgba(255,255,255,0.3); }
+
+    .transcript-scroll {
+      font-size: 13px;
+      color: rgba(255,255,255,0.85);
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.5;
+      max-height: 60px;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+
+    .transcript-scroll .flagged {
+      background: rgba(239,68,68,0.3);
+      color: #ffb3b3;
+      padding: 2px 5px;
+      border-radius: 6px;
+    }
+
+    /* Guard companion card */
+    .companion-card {
+      margin: 0 16px 14px;
+      border-radius: 20px;
+      padding: 16px 18px;
+      transition: all 0.4s ease;
+    }
+
+    .companion-card.safe {
+      background: rgba(26,158,110,0.12);
+      border: 1px solid rgba(26,158,110,0.25);
+    }
+
+    .companion-card.warning {
+      background: #fef9ec;
+      border: 1px solid var(--yellow-border);
+    }
+
+    .companion-card.danger, .companion-card.alert {
+      background: #fdf2f2;
+      border: 1px solid var(--red-border);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .card-icon {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .safe .card-icon    { background: rgba(26,158,110,0.15); }
+    .warning .card-icon { background: rgba(244,183,64,0.18); }
+    .danger  .card-icon, .alert .card-icon { background: rgba(217,48,48,0.12); }
+
+    .card-info {}
+
+    .card-headline {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .safe    .card-headline { color: #1a9e6e; }
+    .warning .card-headline { color: #c8860a; }
+    .danger  .card-headline, .alert .card-headline { color: #d93030; }
+
+    .card-score {
+      display: inline;
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .safe    .card-score { color: #111; }
+    .warning .card-score { color: #111; }
+    .danger  .card-score, .alert .card-score { color: #111; }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #111;
+      margin-top: 2px;
+      line-height: 1.25;
+    }
+
+    .card-detected {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    /* recommended action */
+    .recommended {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,0.07);
+    }
+
+    .recommended-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 5px;
+    }
+
+    .recommended-text {
+      font-size: 12px;
+      color: #333;
+      line-height: 1.45;
+    }
+
+    /* verification hint */
+    .verif-hint {
+      margin-top: 8px;
+      background: rgba(0,0,0,0.04);
+      border: 1px solid rgba(0,0,0,0.07);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .verif-hint-icon {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid #ccc;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .verif-hint-body {}
+
+    .verif-hint-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #222;
+    }
+
+    .verif-hint-sub {
+      font-size: 10px;
+      color: #888;
+    }
+
+    .verif-ask {
+      margin-top: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 11px;
+      color: #333;
+    }
+
+    /* action buttons */
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .card-action-btn {
+      flex: 1;
+      padding: 9px 10px;
+      border-radius: 12px;
+      border: 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .btn-hangup {
+      background: #d93030;
+      color: white;
+    }
+
+    .btn-alert-family {
+      background: white;
+      color: #333;
+      border: 1px solid rgba(0,0,0,0.12);
+    }
+
+    .vibration-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(217,48,48,0.1);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 10px;
+      color: #d93030;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .show-details {
+      font-size: 11px;
+      color: #c8860a;
+      cursor: pointer;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .show-details.safe-color { color: #1a9e6e; }
+    .show-details.danger-color { color: #d93030; }
+
+    /* bottom call bar */
+    .call-bar {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 16px 16px 32px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .bar-btn {
+      width: 58px; height: 58px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      border: 0;
+      display: grid;
+      place-items: center;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.2s;
+    }
+
+    .bar-btn:hover { background: rgba(255,255,255,0.16); }
+
+    .bar-btn.end-call {
+      background: #d93030;
+      box-shadow: 0 8px 20px rgba(217,48,48,0.35);
+    }
+
+    .bar-btn.start-call {
+      background: #1a9e6e;
+      box-shadow: 0 8px 20px rgba(26,158,110,0.35);
+    }
+
+    .bar-btn.recording-active {
+      background: #d93030;
+      animation: pulse-btn 1.2s ease infinite;
+    }
+
+    @keyframes pulse-btn {
+      0%,100% { box-shadow: 0 8px 20px rgba(217,48,48,0.35); }
+      50%      { box-shadow: 0 8px 28px rgba(217,48,48,0.6); }
+    }
+
+    /* conn indicator */
+    .conn-badge {
+      position: absolute;
+      top: 14px; right: 14px;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.6);
+      color: rgba(255,255,255,0.5);
+      font-weight: 600;
+      z-index: 10;
+    }
+
+    .conn-badge.live  { background: rgba(26,158,110,0.2); color: #4ade80; }
+    .conn-badge.error { background: rgba(217,48,48,0.2);  color: #f87171; }
+
+    /* responsive */
+    @media (max-width: 900px) {
+      .page { grid-template-columns: 1fr; }
+      .right { padding: 32px 20px; }
+      .left  { padding: 36px 28px; }
+      .features { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 500px) {
+      .features { grid-template-columns: 1fr; }
+      .phone-shell { width: 100%; max-width: 360px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="page">
+
+  <!-- ═══ LEFT ═══ -->
+  <div class="left">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="26" height="26" viewBox="0 0 100 100" fill="none">
+          <path d="M50 9L82 20.5V48.5C82 68.5 68.7 86.1 50 92C31.3 86.1 18 68.5 18 48.5V20.5L50 9Z" fill="white" opacity="0.12"/>
+          <path d="M50 22L72 30V48C72 62 63 74 50 79C37 74 28 62 28 48V30L50 22Z" fill="none" stroke="white" stroke-width="3.5"/>
+          <path d="M40 50L47 57L62 41" stroke="#1a9e6e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <h2>Guard Call</h2>
+        <p>Call companion demo · friendly family safety</p>
+      </div>
+    </div>
+
+    <div class="eyebrow">Demo idea</div>
+
+    <h1 class="hero-title">A quiet safety layer that works while the call is still happening.</h1>
+
+    <p class="hero-desc">
+      This prototype simulates a real phone call. Guard Call does not
+      replace the call interface — it listens in the background and
+      surfaces a calm companion card the moment something starts to
+      look like fraud.
+    </p>
+
+    <div class="features">
+      <div class="feat-card">
+        <span class="feat-icon">📞</span>
+        <h4>Live transcript</h4>
+        <p>Speech is captioned in real time. Risky phrases are highlighted as they appear.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🔔</span>
+        <h4>Scaling alert</h4>
+        <p>Icon, color and percentage grow with the risk so the user notices without being scared.</p>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🛡️</span>
+        <h4>Family support</h4>
+        <p>Above 85% risk the phone vibrates and one tap notifies a trusted contact.</p>
+      </div>
+    </div>
+
+    <!-- Scenario tabs -->
+    <div class="scenario-tabs">
+      <button class="tab-btn tab-live" id="tabLive" onclick="switchTab('live')">
+        <span class="dot"></span> Live mic
+      </button>
+      <button class="tab-btn tab-normal active" id="tabNormal" onclick="switchTab('normal')">
+        <span class="dot" style="background:#1a9e6e"></span> Normal call
+      </button>
+      <button class="tab-btn tab-warn" id="tabWarn" onclick="switchTab('warn')">
+        <span class="dot" style="background:#f4b740"></span> Suspicious call
+      </button>
+      <button class="tab-btn tab-danger" id="tabDanger" onclick="switchTab('danger')">
+        <span class="dot" style="background:#ef4444"></span> High-risk call
+      </button>
+    </div>
+
+    <div class="pitch-box">
+      <div class="pitch-label">Pitch line</div>
+      <p>Guard Call stays quiet during normal calls and only becomes visible when the user needs help. It explains the risk, suggests what to say, and helps prevent unsafe decisions — without ever taking over the conversation.</p>
+    </div>
+
+    <div class="server-row">
+      <label for="serverUrl">Backend:</label>
+      <input id="serverUrl" type="text" value="ws://localhost:8000/ws/stream" />
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT — PHONE ═══ -->
+  <div class="right">
+    <div class="phone-shell" id="phoneShell">
+      <span class="conn-badge" id="connBadge">offline</span>
+
+      <div class="phone-screen">
+        <div class="notch"></div>
+
+        <!-- Status bar -->
+        <div class="status-bar">
+          <span id="clockEl">10:24</span>
+          <div class="status-icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="white" opacity="0.8">
+              <rect x="0" y="5" width="3" height="6" rx="1"/>
+              <rect x="4" y="3" width="3" height="8" rx="1"/>
+              <rect x="8" y="1" width="3" height="10" rx="1"/>
+              <rect x="12" y="0" width="3" height="11" rx="1"/>
+            </svg>
+            <svg width="14" height="11" viewBox="0 0 14 11" fill="none" stroke="white" stroke-width="1.4" opacity="0.8">
+              <path d="M1 8.5C3.2 5.8 6 4.5 7 4.5C8 4.5 10.8 5.8 13 8.5"/>
+              <path d="M3.5 10.5C4.8 9 5.8 8.5 7 8.5C8.2 8.5 9.2 9 10.5 10.5"/>
+              <circle cx="7" cy="11" r="0.8" fill="white"/>
+            </svg>
+            <svg width="24" height="11" viewBox="0 0 24 11" fill="none">
+              <rect x="0.5" y="0.5" width="20" height="10" rx="2.5" stroke="white" stroke-opacity="0.4"/>
+              <rect x="2" y="2" width="14" height="7" rx="1.5" fill="white" opacity="0.85"/>
+              <path d="M22 3.5V7.5C22.8 7.2 23.5 6.4 23.5 5.5C23.5 4.6 22.8 3.8 22 3.5Z" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Top pills -->
+        <div class="top-pills">
+          <div class="top-pill">
+            <svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="currentColor" stroke-width="1.3">
+              <path d="M5.5 1L10 2.8V6.5C10 9.3 8.1 11.8 5.5 12.5C2.9 11.8 1 9.3 1 6.5V2.8L5.5 1Z"/>
+            </svg>
+            Protected call
+          </div>
+          <div class="top-pill" id="langPill">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
+              <circle cx="6" cy="6" r="5"/>
+              <path d="M6 1C6 1 4 3.5 4 6C4 8.5 6 11 6 11"/>
+              <path d="M6 1C6 1 8 3.5 8 6C8 8.5 6 11 6 11"/>
+              <path d="M1 6H11"/>
+            </svg>
+            <span id="langText">—</span>
+          </div>
+        </div>
+
+        <!-- Caller -->
+        <div class="caller-section">
+          <div class="caller-avatar">M</div>
+          <div class="caller-name">Unknown caller</div>
+          <div class="caller-sub">Incoming voice call</div>
+          <div class="call-timer">
+            <span class="call-timer-dot" id="timerDot" style="background:rgba(255,255,255,0.2)"></span>
+            <span id="callTimerEl">00:00</span>
+          </div>
+        </div>
+
+        <!-- Transcript bar -->
+        <div class="transcript-bar">
+          <div class="transcript-bar-label">
+            <span class="tl-dot inactive" id="liveDotEl"></span>
+            LIVE TRANSCRIPT · <span id="listenStatus">IDLE</span>
+          </div>
+          <div class="transcript-scroll" id="transcriptEl">
+            Press Start to begin monitoring…
+          </div>
+        </div>
+
+        <!-- Companion card -->
+        <div class="companion-card safe" id="companionCard">
+          <div class="card-top">
+            <div class="card-icon">✅</div>
+            <div class="card-info">
+              <div class="card-headline">Listening quietly · <span class="card-score" id="scoreEl">0%</span></div>
+              <div class="card-title" id="cardTitle">No risk detected</div>
+              <div class="card-detected" id="cardDetected"></div>
+            </div>
+          </div>
+          <div id="cardExtra"></div>
+          <div class="show-details safe-color" id="showDetails">Show details ∨</div>
+        </div>
+
+        <!-- Call bar -->
+        <div class="call-bar">
+          <button class="bar-btn" onclick="toggleMute()" id="muteBtn" title="Mute">
+            🎙
+          </button>
+          <button class="bar-btn" title="Keypad">⌨️</button>
+          <button class="bar-btn end-call" id="mainCallBtn" onclick="toggleMonitoring()" title="Start/Stop">
+            📞
+          </button>
+          <button class="bar-btn" title="Speaker">🔊</button>
+          <button class="bar-btn" title="More">➕</button>
+        </div>
+
+      </div><!-- /phone-screen -->
+    </div><!-- /phone-shell -->
+  </div><!-- /right -->
+
+</div><!-- /page -->
+
+<script>
+  // ── URL param for ngrok ───────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  if (params.get("server")) {
+    document.getElementById("serverUrl").value = params.get("server");
+  }
+
+  // ── DOM ───────────────────────────────────────────────────
+  const phoneShell    = document.getElementById("phoneShell");
+  const connBadge     = document.getElementById("connBadge");
+  const clockEl       = document.getElementById("clockEl");
+  const callTimerEl   = document.getElementById("callTimerEl");
+  const timerDot      = document.getElementById("timerDot");
+  const langText      = document.getElementById("langText");
+  const listenStatus  = document.getElementById("listenStatus");
+  const liveDotEl     = document.getElementById("liveDotEl");
+  const transcriptEl  = document.getElementById("transcriptEl");
+  const companionCard = document.getElementById("companionCard");
+  const scoreEl       = document.getElementById("scoreEl");
+  const cardTitle     = document.getElementById("cardTitle");
+  const cardDetected  = document.getElementById("cardDetected");
+  const cardExtra     = document.getElementById("cardExtra");
+  const showDetails   = document.getElementById("showDetails");
+  const mainCallBtn   = document.getElementById("mainCallBtn");
+  const muteBtn       = document.getElementById("muteBtn");
+
+  // ── State ─────────────────────────────────────────────────
+  let ws = null, stream = null, isRecording = false, muted = false;
+  let callSec = 0, callInterval = null, activeTab = "normal";
+  let sessionMaxScore = 0;   // score только растёт в течение сессии
+
+  // Зеркало бэкендовой get_threat_level
+  function get_threat_level(score) {
+    if (score > 0.9)  return "alert";
+    if (score > 0.7)  return "danger";
+    if (score >= 0.4) return "warning";
+    return "safe";
+  }
+
+  // ── Clock ─────────────────────────────────────────────────
+  function updateClock() {
+    const n = new Date();
+    clockEl.textContent = n.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+  updateClock(); setInterval(updateClock, 10000);
+
+  // ── Tab switching ─────────────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+    ["tabLive","tabNormal","tabWarn","tabDanger"].forEach(id => {
+      document.getElementById(id).classList.remove("active");
+    });
+
+    if (tab === "live") {
+      document.getElementById("tabLive").classList.add("active");
+      toggleMonitoring();
+    } else {
+      const map = { normal: "tabNormal", warn: "tabWarn", danger: "tabDanger" };
+      document.getElementById(map[tab]).classList.add("active");
+      stopMonitoring();
+      applyScenario(tab);
+    }
+  }
+
+  // ── Scenarios ─────────────────────────────────────────────
+  const SCENARIOS = {
+    normal: {
+      level: "safe", score: 0.09,
+      transcript: "Hi Maya, how are you? I was just calling about Saturday — are we still on?",
+      flagged: [],
+      title: "No risk detected",
+      detected: "",
+      action: null,
+      verif: null,
+    },
+    warn: {
+      level: "warning", score: 0.57,
+      transcript: "I'm calling from the security department of your ba—",
+      flagged: ["your ba"],
+      title: "Bank topic detected",
+      detected: "Detected: bank topic + identity verification",
+      action: "Do not share private details. Call back through the official bank app.",
+      verif: { title: "Quick verification check", sub: "Auto-suggested · ask it during the call", ask: 'Ask: "What is our family safety word?"' },
+    },
+    danger: {
+      level: "danger", score: 0.91,
+      transcript: "Listen carefully — this is urgent. Someone is trying to—",
+      flagged: ["urgent"],
+      title: "Do not share the SMS code",
+      detected: "Detected: urgency + secrecy + SMS code request",
+      action: "Hang up and call the official bank number.",
+      vibration: true,
+      buttons: true,
+    },
+  };
+
+  function applyScenario(tab) {
+    const s = SCENARIOS[tab] || SCENARIOS.normal;
+    renderUI(s.score, s.level, s.transcript, s.flagged, s.title, s.detected, s.action, s.verif, s.vibration, s.buttons);
+  }
+
+  // ── Render UI ─────────────────────────────────────────────
+  function renderUI(score, level, transcript, flagged, title, detected, action, verif, vibration, showBtns) {
+    const pct = Math.round(score * 100);
+    scoreEl.textContent = pct + "%";
+    cardTitle.textContent = title || "";
+    cardDetected.textContent = detected || "";
+
+    // transcript: only used by demo scenarios, live mode uses appendTranscript()
+    if (transcript !== null) {
+      let tHtml = transcript || "";
+      (flagged || []).forEach(f => {
+        const esc = f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        tHtml = tHtml.replace(new RegExp(esc, "gi"), `<span class="flagged">$&</span>`);
+      });
+      transcriptEl.innerHTML = tHtml || "Listening…";
+    }
+
+    // card class
+    companionCard.className = "companion-card " + (level === "alert" ? "danger" : level);
+
+    // icon + headline
+    const iconMap = { safe: "✅", warning: "⚠️", danger: "🚨", alert: "🚨" };
+    const headMap = {
+      safe:    `Listening quietly · <span class="card-score">${pct}%</span>`,
+      warning: `Be careful · <span class="card-score">${pct}%</span>`,
+      danger:  `Critical risk · <span class="card-score">${pct}%</span>`,
+      alert:   `Critical risk · <span class="card-score">${pct}%</span>`,
+    };
+
+    companionCard.querySelector(".card-icon").textContent = iconMap[level] || "✅";
+    companionCard.querySelector(".card-headline").innerHTML = headMap[level] || headMap.safe;
+
+    // show-details color
+    showDetails.className = "show-details " + (level === "safe" ? "safe-color" : level === "warning" ? "" : "danger-color");
+
+    // extra content
+    let extraHtml = "";
+    if (vibration) {
+      extraHtml += `<div class="vibration-badge">● Vibration alert triggered</div>`;
+    }
+    if (action) {
+      extraHtml += `
+        <div class="recommended">
+          <div class="recommended-label">Recommended action</div>
+          <div class="recommended-text">${action}</div>
+        </div>`;
+    }
+    if (verif) {
+      extraHtml += `
+        <div class="verif-hint">
+          <div class="verif-hint-icon"></div>
+          <div class="verif-hint-body">
+            <div class="verif-hint-title">${verif.title}</div>
+            <div class="verif-hint-sub">${verif.sub}</div>
+          </div>
+        </div>
+        <div class="verif-ask">${verif.ask} <span style="opacity:0.4">↺</span></div>`;
+    }
+    if (showBtns) {
+      extraHtml += `
+        <div class="card-actions">
+          <button class="card-action-btn btn-hangup" onclick="stopMonitoring()">📞 Hang up safely</button>
+          <button class="card-action-btn btn-alert-family">🔔 Alert family</button>
+        </div>`;
+    }
+    cardExtra.innerHTML = extraHtml;
+
+    // phone ring
+    if (level === "danger" || level === "alert") {
+      phoneShell.classList.add("danger-ring");
+    } else {
+      phoneShell.classList.remove("danger-ring");
+    }
+  }
+
+  // ── Transcript accumulator ────────────────────────────────
+  // Keeps the full running text for the live ticker
+  let fullTranscript = "";
+  let allFlaggedPhrases = new Set();
+
+  function appendTranscript(newText, phrases) {
+    if (!newText || !newText.trim()) return;
+    // append with space separator
+    fullTranscript = fullTranscript
+      ? fullTranscript + " " + newText.trim()
+      : newText.trim();
+    // keep last 400 chars so the bar doesn't grow forever
+    if (fullTranscript.length > 400) {
+      fullTranscript = "…" + fullTranscript.slice(-380);
+    }
+    phrases.forEach(p => allFlaggedPhrases.add(p.toLowerCase()));
+    renderTranscriptBar();
+  }
+
+  function renderTranscriptBar() {
+    let html = fullTranscript;
+    allFlaggedPhrases.forEach(phrase => {
+      const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      html = html.replace(new RegExp(esc, "gi"), `<span class="flagged">$&</span>`);
+    });
+    transcriptEl.innerHTML = html || "Listening…";
+    // scroll to end so latest text is visible
+    transcriptEl.parentElement.scrollLeft = transcriptEl.parentElement.scrollWidth;
+  }
+
+  function resetTranscript() {
+    fullTranscript = "";
+    allFlaggedPhrases.clear();
+    transcriptEl.innerHTML = "Press Start to begin monitoring…";
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────
+  function connectWebSocket() {
+    const url = document.getElementById("serverUrl").value.trim();
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      connBadge.textContent = "live";
+      connBadge.className = "conn-badge live";
+      liveDotEl.className = "tl-dot";
+      listenStatus.textContent = "LISTENING";
+    };
+
+    ws.onclose = () => {
+      connBadge.textContent = "offline";
+      connBadge.className = "conn-badge";
+      liveDotEl.className = "tl-dot inactive";
+      listenStatus.textContent = "IDLE";
+    };
+
+    ws.onerror = () => {
+      connBadge.textContent = "error";
+      connBadge.className = "conn-badge error";
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const d = JSON.parse(event.data);
+        const rawScore = d.final_score || 0;
+        const phrases  = d.matched_phrases || [];
+        const lang     = d.language || "";
+        const text     = d.transcript || "";
+
+        if (lang && lang !== "unknown") langText.textContent = lang.toUpperCase();
+
+        // Score только растёт — сбрасывается лишь при stopMonitoring()
+        sessionMaxScore = Math.max(sessionMaxScore, rawScore);
+        const score = sessionMaxScore;
+        const level = get_threat_level(score);
+
+        // accumulate transcript
+        appendTranscript(text, phrases);
+
+        const titleMap = {
+          safe:    "No risk detected",
+          warning: "Suspicious pattern detected",
+          danger:  "High fraud risk",
+          alert:   "High fraud risk",
+        };
+        const detected = phrases.length > 0
+          ? `Detected: "${phrases.slice(0,2).join('", "')}"` : "";
+        const actionMap = {
+          safe:    null,
+          warning: "Do not share private details. Call back through the official number.",
+          danger:  "Hang up and call the official bank number.",
+          alert:   "Hang up immediately and call the official number.",
+        };
+
+        renderUI(score, level, null, null, titleMap[level], detected, actionMap[level], null, level === "alert", level === "danger" || level === "alert");
+      } catch(e) { console.warn(e); }
+    };
+  }
+
+  // ── WAV recorder (no ffmpeg needed, no main-thread lag) ──
+  // Uses MediaRecorder for capture (off main thread),
+  // then converts the blob to WAV via AudioContext decode + re-encode.
+  let audioCtx = null;
+
+  function encodeWAV(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);   // PCM
+    v.setUint16(22, 1, true);   // mono
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buf;
+  }
+
+  // Fast base64: chunk the Uint8Array so String.fromCharCode doesn't OOM
+  function toBase64(bytes) {
+    const CHUNK = 8192;
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+  }
+
+  async function blobToWavBase64(blob) {
+    console.log("[audio] blob size:", blob.size, "type:", blob.type);
+    const arrayBuf = await blob.arrayBuffer();
+    if (!audioCtx) audioCtx = new AudioContext();
+    // Decode whatever format the browser produced (webm/mp4/ogg)
+    const decoded = await audioCtx.decodeAudioData(arrayBuf);
+    console.log("[audio] decoded:", decoded.duration.toFixed(2), "s, SR:", decoded.sampleRate);
+    // Resample to 16kHz mono via OfflineAudioContext
+    const TARGET = 16000;
+    const duration = decoded.duration;
+    const offCtx = new OfflineAudioContext(1, Math.ceil(duration * TARGET), TARGET);
+    const src = offCtx.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+    const pcm = rendered.getChannelData(0);
+    const wavBuf = encodeWAV(pcm, TARGET);
+    return toBase64(new Uint8Array(wavBuf));
+  }
+
+  function bestMime() {
+    for (const t of ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return "";
+  }
+
+  async function startMonitoring() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      alert("Microphone access denied.\n" + err.message);
+      return;
+    }
+
+    resetTranscript();
+    connectWebSocket();
+    await new Promise(r => setTimeout(r, 600));
+
+    isRecording = true;
+    mainCallBtn.textContent = "⏹";
+    mainCallBtn.classList.remove("end-call", "start-call");
+    mainCallBtn.classList.add("recording-active");
+    timerDot.style.background = "#1a9e6e";
+
+    callSec = 0;
+    callTimerEl.textContent = "00:00";
+    callInterval = setInterval(() => {
+      callSec++;
+      const m = String(Math.floor(callSec / 60)).padStart(2, "0");
+      const s = String(callSec % 60).padStart(2, "0");
+      callTimerEl.textContent = `${m}:${s}`;
+    }, 1000);
+
+    // MediaRecorder runs off the main thread — no lag
+    function recordChunk() {
+      if (!isRecording || !stream) return;
+      const rec = new MediaRecorder(stream, { mimeType: bestMime() });
+      const chunks = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      rec.onstop = async () => {
+        if (!chunks.length || !ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+          const blob = new Blob(chunks, { type: rec.mimeType });
+          const b64 = await blobToWavBase64(blob);
+          ws.send(b64);
+        } catch (e) { console.warn("encode error", e); }
+      };
+      rec.start();
+      setTimeout(() => {
+        if (rec.state === "recording") rec.stop();
+        if (isRecording) recordChunk();
+      }, 3000);
+    }
+
+    recordChunk();
+  }
+
+  function stopMonitoring() {
+    isRecording = false;
+    sessionMaxScore = 0;
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    if (stream)   { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (ws)       { ws.close(); ws = null; }
+    clearInterval(callInterval); callInterval = null;
+
+    mainCallBtn.textContent = "📞";
+    mainCallBtn.classList.remove("recording-active", "start-call");
+    mainCallBtn.classList.add("end-call");
+    timerDot.style.background = "rgba(255,255,255,0.2)";
+    liveDotEl.className = "tl-dot inactive";
+    listenStatus.textContent = "IDLE";
+
+    if (activeTab !== "live") applyScenario(activeTab);
+  }
+
+  function toggleMonitoring() {
+    if (isRecording) stopMonitoring();
+    else startMonitoring();
+  }
+
+  function toggleMute() {
+    if (!stream) return;
+    muted = !muted;
+    stream.getAudioTracks().forEach(t => { t.enabled = !muted; });
+    muteBtn.style.opacity = muted ? "0.4" : "1";
+  }
+
+  // ── Init ──────────────────────────────────────────────────
+  activeTab = "normal";
+  applyScenario("normal");
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/lizafurman/Downloads/hackathon-project-2026-main/.claude)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(pip install *)",
+      "Bash(ffmpeg -version)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8001/docs)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -i -N -H \"Connection: Upgrade\" -H \"Upgrade: websocket\" -H \"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\" -H \"Sec-WebSocket-Version: 13\" http://localhost:8000/ws/stream)",
+      "Bash(curl -s http://localhost:8000/history)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:8001/analyze_text -X POST -H 'Content-Type: application/json' -d '{\"audio_base64\":\"\",\"file_extension\":\"wav\"}')"
+    ]
+  }
+}
