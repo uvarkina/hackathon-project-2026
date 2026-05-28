@@ -21,6 +21,16 @@ except ImportError:
 
 NLP_SERVICE_URL = "http://localhost:8001"
 
+# Попытка подключить NLP-модули напрямую (резерв если порт 8001 не запущен)
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "text_fraud_recognition"))
+try:
+    from transcriber import transcribe_audio as _transcribe_audio
+    from fraud_detector import check_fraud_phrases as _check_fraud_phrases
+    _NLP_DIRECT = True
+except Exception:
+    _NLP_DIRECT = False
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "calls.db")
 
 app = FastAPI(title="Guard Call — Audio Fraud Detection")
@@ -33,8 +43,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def _nlp_direct(audio_base64: str) -> dict:
+    """Вызов NLP-функций напрямую (без HTTP) — резерв когда порт 8001 не запущен."""
+    audio_bytes = base64.b64decode(audio_base64)
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        loop = asyncio.get_event_loop()
+        transcription = await loop.run_in_executor(None, _transcribe_audio, tmp_path)
+        text = transcription["text"]
+        language = transcription["language"]
+        fraud = await loop.run_in_executor(None, _check_fraud_phrases, text, language)
+        return {
+            "text_score": fraud["text_score"],
+            "transcript": text,
+            "language": language,
+            "matched_phrases": fraud["matched_phrases"],
+            "category": fraud["category"],
+        }
+    except Exception:
+        return {"text_score": 0.0, "transcript": "", "language": "unknown",
+                "matched_phrases": [], "category": "none"}
+    finally:
+        os.unlink(tmp_path)
+
+
 async def call_nlp_service(audio_base64: str) -> dict:
-    """Call Participant 2's NLP service for transcription + fraud phrase detection."""
+    """
+    Сначала пробуем HTTP-сервис на порту 8001.
+    Если не запущен — вызываем NLP-функции напрямую.
+    """
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
@@ -43,6 +82,8 @@ async def call_nlp_service(audio_base64: str) -> dict:
             )
             return response.json()
     except Exception:
+        if _NLP_DIRECT:
+            return await _nlp_direct(audio_base64)
         return {"text_score": 0.0, "transcript": "", "language": "unknown",
                 "matched_phrases": [], "category": "none"}
 
@@ -206,7 +247,7 @@ async def websocket_stream(websocket: WebSocket):
                 os.unlink(tmp_path)
 
             voice_score = float(voice_result.get("score", 0.5))
-            text_score = float(text_result.get("score", 0.0))
+            text_score = float(text_result.get("text_score", 0.0))
             final_score = round(voice_score * 0.6 + text_score * 0.4, 4)
             level = get_threat_level(final_score)
 
