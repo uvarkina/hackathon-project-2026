@@ -6,11 +6,14 @@ load_dotenv()
 
 _model = None
 
+# initial_prompt helps Whisper stay in Hebrew mode and improves recognition
+_HE_PROMPT = "שיחה בעברית. זיהוי הונאה."  # "Conversation in Hebrew. Fraud detection."
+
 
 def _get_model():
     global _model
     if _model is None:
-        _model = WhisperModel("tiny", device="cpu", compute_type="int8")
+        _model = WhisperModel("base", device="cpu", compute_type="int8")
     return _model
 
 
@@ -74,16 +77,17 @@ def transcribe_audio(audio_path: str) -> dict:
         audio_input, sr = _read_wav(audio_path)
         base_kwargs = dict(
             sampling_rate=sr,
-            beam_size=1,
-            vad_filter=True,
-            no_speech_threshold=0.6,
+            beam_size=5,
+            vad_filter=False,          # don't filter — Hebrew phonemes can be cut by VAD
             condition_on_previous_text=False,
+            initial_prompt=_HE_PROMPT, # hint Whisper it's Hebrew
         )
     except Exception:
         audio_input = audio_path
         base_kwargs = dict(
-            beam_size=1,
-            vad_filter=True,
+            beam_size=5,
+            vad_filter=False,
+            initial_prompt=_HE_PROMPT,
         )
 
     # Always force Hebrew — no auto-detection, no Arabic, no Russian
