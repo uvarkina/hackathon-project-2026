@@ -24,7 +24,7 @@ echo "  История звонков:    http://localhost:8000/history"
 echo ""
 
 sleep 2
-open frontend/index.html 2>/dev/null || true
+open http://localhost:8000 2>/dev/null || true
 
 echo "Нажми Ctrl+C для остановки."
 

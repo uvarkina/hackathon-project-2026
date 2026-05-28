@@ -13,6 +13,8 @@ import aiosqlite
 import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .analysis import analyze_voice
@@ -32,6 +34,7 @@ except Exception:
     _NLP_DIRECT = False
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "calls.db")
+FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 app = FastAPI(title="Guard Call — Audio Fraud Detection")
 
@@ -158,6 +161,10 @@ def send_fraud_alert(matched_phrases: list, transcript: str):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@app.get("/")
+async def serve_frontend():
+    return FileResponse(os.path.join(FRONTEND_PATH, "guard_call.html"))
 
 @app.get("/health")
 async def health_check():
