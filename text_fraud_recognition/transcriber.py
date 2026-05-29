@@ -6,11 +6,14 @@ load_dotenv()
 
 _model = None
 
+# initial_prompt helps Whisper stay in Hebrew mode and improves recognition
+_HE_PROMPT = "שיחה בעברית. זיהוי הונאה."  # "Conversation in Hebrew. Fraud detection."
+
 
 def _get_model():
     global _model
     if _model is None:
-        _model = WhisperModel("tiny", device="cpu", compute_type="int8")
+        _model = WhisperModel("base", device="cpu", compute_type="int8")
     return _model
 
 
@@ -37,63 +40,67 @@ def _read_wav(file_path: str):
     return audio, frame_rate
 
 
+def _run_forced(model, audio_input, lang, extra_kwargs):
+    """Transcribe with a forced language. Returns (text, segments_list)."""
+    segs_gen, _ = model.transcribe(audio_input, language=lang, **extra_kwargs)
+    parts = []
+    segs_list = []
+    for seg in segs_gen:
+        t = seg.text.strip()
+        parts.append(t)
+        segs_list.append({
+            "start": round(seg.start, 3),
+            "end": round(seg.end, 3),
+            "text": t,
+        })
+    return " ".join(parts), segs_list
+
+
+def _has_hebrew(text: str) -> bool:
+    return any('֐' <= c <= '׿' for c in text)
+
+
+def _has_cyrillic(text: str) -> bool:
+    return any('Ѐ' <= c <= 'ӿ' for c in text)
+
+
 def transcribe_audio(audio_path: str) -> dict:
     """
     Transcribe a short audio clip (~3 seconds) using faster-whisper.
     Reads WAV directly via numpy — no ffmpeg required.
-    Auto-detects language between Hebrew ("he") and Russian ("ru").
+    Always transcribes in Hebrew ("he") only.
     """
     model = _get_model()
 
+    # Try to load WAV directly; fall back to file path (for mp3/webm)
     try:
-        audio_array, sr = _read_wav(audio_path)
-        segments_gen, info = model.transcribe(
-            audio_array,
+        audio_input, sr = _read_wav(audio_path)
+        base_kwargs = dict(
             sampling_rate=sr,
-            beam_size=1,
-            language=None,          # авто-определение
-            vad_filter=True,        # пропускать тишину
-            no_speech_threshold=0.6,
+            beam_size=5,
+            vad_filter=False,          # don't filter — Hebrew phonemes can be cut by VAD
             condition_on_previous_text=False,
+            initial_prompt=_HE_PROMPT, # hint Whisper it's Hebrew
         )
     except Exception:
-        segments_gen, info = model.transcribe(
-            audio_path,
-            beam_size=1,
-            language=None,
-            vad_filter=True,
+        audio_input = audio_path
+        base_kwargs = dict(
+            beam_size=5,
+            vad_filter=False,
+            initial_prompt=_HE_PROMPT,
         )
 
-    detected_language = info.language if info.language in ("he", "ru") else "ru"
+    # Always force Hebrew — no auto-detection, no Arabic, no Russian
+    text, segments_list = _run_forced(model, audio_input, "he", base_kwargs)
 
-    segments_list = []
-    full_text_parts = []
-
-    for segment in segments_gen:
-        segments_list.append({
-            "start": round(segment.start, 3),
-            "end": round(segment.end, 3),
-            "text": segment.text.strip(),
-        })
-        full_text_parts.append(segment.text.strip())
-
-    full_text = " ".join(full_text_parts)
-
-    # Filter hallucinations: if forced language is ru/he but text has no matching chars — discard
-    if detected_language == "ru":
-        has_script = any('Ѐ' <= c <= 'ӿ' for c in full_text)
-    elif detected_language == "he":
-        has_script = any('֐' <= c <= '׿' for c in full_text)
-    else:
-        has_script = True
-
-    if not has_script:
-        full_text = ""
+    # If output contains no Hebrew characters — it's silence or noise, discard
+    if not _has_hebrew(text):
+        text = ""
         segments_list = []
 
     return {
-        "text": full_text,
-        "language": detected_language,
+        "text": text,
+        "language": "he",
         "segments": segments_list,
     }
 
