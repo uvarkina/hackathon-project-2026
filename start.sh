@@ -3,6 +3,10 @@
 
 cd "$(dirname "$0")"
 
+# Фикс macOS: без этого TensorFlow/PyTorch C++ расширения падают
+# с "mutex lock failed" при любом fork() после загрузки ObjC runtime.
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
 echo "=== Guard Call ==="
 echo "Устанавливаю зависимости..."
 pip install -r requirements.txt -q
@@ -13,7 +17,7 @@ echo "Запускаю NLP-сервис (Участник 2) на порту 800
 NLP_PID=$!
 
 echo "Запускаю основной бэкенд на порту 8000..."
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 echo ""

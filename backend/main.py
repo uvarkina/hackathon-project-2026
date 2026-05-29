@@ -11,15 +11,21 @@ from datetime import datetime
 
 import aiosqlite
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+# Load .env BEFORE importing notifier — it reads env vars on import.
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 try:
     from .analysis import analyze_voice
+    from .notifier import send_fraud_alert as _send_alert_async
 except ImportError:
     from analysis import analyze_voice
+    from notifier import send_fraud_alert as _send_alert_async
 
 NLP_SERVICE_URL = "http://localhost:8001"
 
@@ -144,9 +150,9 @@ async def startup():
 # ---------------------------------------------------------------------------
 
 def get_threat_level(score: float) -> str:
-    if score > 0.9:
+    if score > 0.8:
         return "alert"
-    elif score > 0.7:
+    elif score > 0.6:
         return "danger"
     elif score >= 0.4:
         return "warning"
@@ -154,8 +160,10 @@ def get_threat_level(score: float) -> str:
 
 
 def send_fraud_alert(matched_phrases: list, transcript: str):
-    """Stub — Participant 5 replaces this with Twilio."""
+    """Fire WhatsApp alert via Twilio (notifier.py). Non-blocking."""
     print(f"[FRAUD ALERT] Phrases: {matched_phrases} | '{transcript[:80]}'")
+    # Schedule async send without blocking the WebSocket loop.
+    asyncio.create_task(_send_alert_async(matched_phrases, transcript))
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +203,19 @@ async def get_history():
     ]
 
 
+@app.post("/test_alert")
+async def test_alert():
+    """Manual trigger for the WhatsApp alert — bypasses the score gate.
+    Use curl -X POST http://localhost:8000/test_alert to debug Twilio."""
+    fake_phrases = ["מהבנק שלך נפרץ", "אשר את מספר הכרטיס"]
+    fake_transcript = "שלום, אני מהבנק. החשבון שלך נפרץ."
+    try:
+        await _send_alert_async(fake_phrases, fake_transcript)
+        return {"status": "alert dispatched — check terminal logs and your WhatsApp"}
+    except Exception as e:
+        return {"status": "error", "detail": f"{type(e).__name__}: {e}"}
+
+
 @app.post("/cancel_alert")
 async def cancel_alert():
     """Reset alert counter for all active connections (false-positive button)."""
@@ -202,6 +223,14 @@ async def cancel_alert():
         state["consecutive_high"] = 0
         state["alert_sent"] = False
     return {"status": "alert cancelled"}
+
+def normalize_1(num: float) -> float:
+    if num < 0.2:
+        return num
+    elif num < 0.4:
+        return (num-0.2)*0.8/0.3+0.2
+    else:
+        return (num-0.5)*0.2/0.5+0.8
 
 
 @app.websocket("/ws/stream")
@@ -254,6 +283,8 @@ async def websocket_stream(websocket: WebSocket):
                 os.unlink(tmp_path)
 
             voice_score = float(voice_result.get("score", 0.5))
+            voice_score = normalize_1(voice_score)
+
             text_score = float(text_result.get("text_score", 0.0))
             final_score = round(voice_score * 0.6 + text_score * 0.4, 4)
             level = get_threat_level(final_score)
@@ -272,12 +303,12 @@ async def websocket_stream(websocket: WebSocket):
                     session_phrases.append(p)
 
             # Alert logic: trigger after 2 consecutive windows above 0.9
-            if final_score > 0.9:
+            if final_score > 0.6:
                 state["consecutive_high"] += 1
             else:
                 state["consecutive_high"] = 0
 
-            if state["consecutive_high"] >= 2 and not state["alert_sent"]:
+            if state["consecutive_high"] >= 1 and not state["alert_sent"]:
                 state["alert_sent"] = True
                 send_fraud_alert(matched, transcript)
 

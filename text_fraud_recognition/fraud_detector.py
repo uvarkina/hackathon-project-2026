@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from difflib import SequenceMatcher
 
-from transformers import pipeline
+# transformers НЕ импортируется здесь — только внутри _get_classifier().
+# Импорт на уровне модуля грузит C++ расширения PyTorch при старте uvicorn,
+# что на macOS вызывает "mutex lock failed" и краш Python.
 
 
 # Path to the phrases file
@@ -77,6 +79,7 @@ def _get_classifier():
     """Lazy-load a multilingual zero-shot classification model (runs locally, free)."""
     global _classifier
     if _classifier is None:
+        from transformers import pipeline   # lazy — не при старте сервиса
         _classifier = pipeline(
             "zero-shot-classification",
             model="MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
@@ -129,11 +132,11 @@ def _pattern_detection(transcript_text: str, language: str) -> dict:
     # Score растёт с каждой новой совпавшей фразой
     n = len(matched_phrases)
     if n == 0:   pattern_score = 0.0
-    elif n == 1: pattern_score = 0.45
-    elif n == 2: pattern_score = 0.62
-    elif n == 3: pattern_score = 0.74
-    elif n == 4: pattern_score = 0.84
-    else:        pattern_score = min(0.84 + (n - 4) * 0.04, 0.97)
+    elif n == 1: pattern_score = 0.51
+    elif n == 2: pattern_score = 0.68
+    elif n == 3: pattern_score = 0.84
+    elif n == 4: pattern_score = 0.96
+    else:        pattern_score = min(0.96 + (n - 4) * 0.04, 0.97)
 
     category = _detect_category(matched_phrases, language) if matched_phrases else "none"
 
@@ -146,15 +149,14 @@ def _pattern_detection(transcript_text: str, language: str) -> dict:
 
 def _ai_detection(transcript_text: str, language: str) -> dict:
     """
-    Use a free local zero-shot classification model to assess fraud likelihood.
-
-    Uses MoritzLaurer/mDeBERTa-v3-base-mnli-xnli which supports
-    multilingual text (100+ languages including Hebrew and Russian).
-    Runs entirely locally — no API key or internet needed after first download.
-
-    Returns:
-        dict with ai_score (0.0 to 1.0) and ai_category
+    Zero-shot mDeBERTa отключён: грузит ~1 ГБ модель и считает 1-3 сек
+    на каждый 3-секундный чанк → текст вылазит с задержкой 5+ секунд.
+    Pattern matching на ивритских/русских фразах работает достаточно хорошо.
+    Чтобы включить обратно — убрать ранний return ниже.
     """
+    return {"ai_score": 0.0, "ai_category": "none"}
+
+    # ── disabled below ──
     candidate_labels = [
         "bank fraud phone scam",
         "police impersonation scam",

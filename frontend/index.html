@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Guard Call</title>
+  <title>SafeWawe</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -417,11 +417,14 @@
       white-space: normal;
       word-break: break-word;
       line-height: 1.5;
-      max-height: 60px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
+      max-height: 72px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .transcript-scroll::-webkit-scrollbar { width: 4px; }
+    .transcript-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
     }
 
     .transcript-scroll .flagged {
@@ -759,7 +762,7 @@
         </svg>
       </div>
       <div class="logo-text">
-        <h2>Guard Call</h2>
+        <h2>SafeWawe</h2>
         <p>Call companion demo · friendly family safety</p>
       </div>
     </div>
@@ -769,7 +772,7 @@
     <h1 class="hero-title">A quiet safety layer that works while the call is still happening.</h1>
 
     <p class="hero-desc">
-      This prototype simulates a real phone call. Guard Call does not
+      This prototype simulates a real phone call. SafeWawe does not
       replace the call interface — it listens in the background and
       surfaces a calm companion card the moment something starts to
       look like fraud.
@@ -811,7 +814,7 @@
 
     <div class="pitch-box">
       <div class="pitch-label">Pitch line</div>
-      <p>Guard Call stays quiet during normal calls and only becomes visible when the user needs help. It explains the risk, suggests what to say, and helps prevent unsafe decisions — without ever taking over the conversation.</p>
+      <p>SafeWawe stays quiet during normal calls and only becomes visible when the user needs help. It explains the risk, suggests what to say, and helps prevent unsafe decisions — without ever taking over the conversation.</p>
     </div>
 
     <div class="server-row">
@@ -895,11 +898,11 @@
         <!-- AI score breakdown -->
         <div class="score-breakdown">
           <div class="score-pill">
-            <span class="score-pill-label">🤖 AI голос</span>
+            <span class="score-pill-label">🤖 AI voice</span>
             <span class="score-pill-value low" id="voiceScoreEl">—</span>
           </div>
           <div class="score-pill">
-            <span class="score-pill-label">📝 Фразы</span>
+            <span class="score-pill-label">📝 Phrases</span>
             <span class="score-pill-value low" id="textScoreEl">—</span>
           </div>
         </div>
@@ -967,11 +970,13 @@
   let ws = null, stream = null, isRecording = false, muted = false;
   let callSec = 0, callInterval = null, activeTab = "normal";
   let sessionMaxScore = 0;   // score только растёт в течение сессии
+  let sessionMaxVoice = 0;   // % AI-голоса — high-water-mark
+  let sessionMaxText  = 0;   // % фраз — high-water-mark
 
   // Зеркало бэкендовой get_threat_level
   function get_threat_level(score) {
-    if (score > 0.9)  return "alert";
-    if (score > 0.7)  return "danger";
+    if (score > 0.8)  return "alert";
+    if (score > 0.6)  return "danger";
     if (score >= 0.4) return "warning";
     return "safe";
   }
@@ -1139,8 +1144,8 @@
       html = html.replace(new RegExp(esc, "gi"), `<span class="flagged">$&</span>`);
     });
     transcriptEl.innerHTML = html || "Listening…";
-    // scroll to end so latest text is visible
-    transcriptEl.parentElement.scrollLeft = transcriptEl.parentElement.scrollWidth;
+    // scroll to bottom so the latest text is always visible
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
   }
 
   function resetTranscript() {
@@ -1176,15 +1181,24 @@
     ws.onmessage = (event) => {
       try {
         const d = JSON.parse(event.data);
-        const rawScore = d.final_score || 0;
         const phrases  = d.matched_phrases || [];
         const lang     = d.language || "";
         const text     = d.transcript || "";
 
         if (lang && lang !== "unknown") langText.textContent = lang.toUpperCase();
 
-        // Score только растёт — сбрасывается лишь при stopMonitoring()
-        sessionMaxScore = Math.max(sessionMaxScore, rawScore);
+        // Decay для voice и text (пик держится короткое время, потом падает на 15% за чанк).
+        if (d.voice_score != null) {
+          sessionMaxVoice = Math.max(d.voice_score, sessionMaxVoice * 0.85);
+        }
+        if (d.text_score != null) {
+          sessionMaxText = Math.max(d.text_score, sessionMaxText * 0.85);
+        }
+
+        // Большая цифра = взвешенное среднее показываемых процентов.
+        // Совпадает с тем, что бэкенд считает (60/40), но опирается на decay-версии,
+        // чтобы UI был согласован: final = 0.6*voice + 0.4*text.
+        sessionMaxScore = sessionMaxVoice * 0.6 + sessionMaxText * 0.4;
         const score = sessionMaxScore;
         const level = get_threat_level(score);
 
@@ -1208,7 +1222,7 @@
 
         renderUI(score, level, null, null, titleMap[level], detected, actionMap[level], null, level === "alert", level === "danger" || level === "alert");
 
-        // AI score breakdown
+        // AI score breakdown — рендерим из тех же значений, что пошли в формулу.
         function setPill(id, value) {
           const el = document.getElementById(id);
           if (!el) return;
@@ -1216,8 +1230,8 @@
           el.textContent = pct + "%";
           el.className = "score-pill-value " + (pct >= 70 ? "high" : pct >= 40 ? "mid" : "low");
         }
-        if (d.voice_score != null) setPill("voiceScoreEl", d.voice_score);
-        if (d.text_score  != null) setPill("textScoreEl",  d.text_score);
+        setPill("voiceScoreEl", sessionMaxVoice);
+        setPill("textScoreEl",  sessionMaxText);
       } catch(e) { console.warn(e); }
     };
   }
@@ -1343,6 +1357,8 @@
   function stopMonitoring() {
     isRecording = false;
     sessionMaxScore = 0;
+    sessionMaxVoice = 0;
+    sessionMaxText  = 0;
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     if (stream)   { stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (ws)       { ws.close(); ws = null; }
