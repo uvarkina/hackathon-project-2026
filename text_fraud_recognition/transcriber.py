@@ -1,3 +1,4 @@
+import os
 import wave
 import numpy as np
 from faster_whisper import WhisperModel
@@ -42,9 +43,10 @@ def _get_cyrillic_token_ids(model):
 def _get_model():
     global _model
     if _model is None:
-        # "small" has much better Hebrew phoneme coverage than "base";
-        # int8 keeps CPU latency acceptable (~2-4 s per 3-s chunk)
-        _model = WhisperModel("small", device="cpu", compute_type="int8")
+        # Size configurable via WHISPER_MODEL. "small" = best Hebrew (local);
+        # "base"/"tiny" = much faster on low-CPU servers (set on Render).
+        name = os.environ.get("WHISPER_MODEL", "small")
+        _model = WhisperModel(name, device="cpu", compute_type="int8")
     return _model
 
 
