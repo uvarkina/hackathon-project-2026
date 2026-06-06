@@ -22,6 +22,15 @@ import warnings
 
 warnings.filterwarnings("ignore")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+# Stop `transformers` from initializing TensorFlow when both torch and TF are
+# installed — on macOS the two clash over OpenMP/threading and deadlock
+# (the "[mutex.cc] RAW: Lock blocking" hang). We only use torch here.
+os.environ.setdefault("USE_TF", "0")
+os.environ.setdefault("USE_FLAX", "0")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+# Avoid duplicate-OpenMP deadlocks between torch/MKL and other libs.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import asyncio
 
@@ -178,6 +187,7 @@ def _get_pretrained():
             return _PT
         try:
             import torch
+            torch.set_num_threads(1)   # single-threaded inference: avoids macOS deadlock
             from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
             fe = AutoFeatureExtractor.from_pretrained(SPOOF_MODEL_ID)
             model = AutoModelForAudioClassification.from_pretrained(SPOOF_MODEL_ID)

@@ -7,7 +7,8 @@ soundfile
 av
 faster-whisper
 scikit-learn
-tensorflow
+# tensorflow  # only needed for VOICE_ENGINE=model (conformer); the default
+#             # engine is wav2vec2 (torch). Uncomment to train/run the Conformer.
 torch
 transformers
 twilio
