@@ -310,8 +310,10 @@ def _score_sync(wav, sr) -> dict:
             return {"score": max(0.0, min(1.0, ai)), "speech": True,
                     "rms": round(rms, 5), "engine": "pretrained"}
 
-    # 2) Local conformer model (output is P(human) -> invert)
-    model = None if VOICE_ENGINE == "heuristic" else _get_model()
+    # 2) Local conformer model (output is P(human) -> invert).
+    #    Only load TensorFlow for the explicit "model" engine — never as a
+    #    fallback for "pretrained" (avoids a TF mutex hang on macOS).
+    model = _get_model() if VOICE_ENGINE == "model" else None
     if model is not None:
         try:
             feat = _extract_mel(wav, sr)

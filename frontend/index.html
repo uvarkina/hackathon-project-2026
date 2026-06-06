@@ -1175,7 +1175,13 @@
 
   // ── WebSocket ─────────────────────────────────────────────
   function connectWebSocket() {
-    const url = "ws://localhost:8000/ws/stream";
+    // Build the WebSocket URL from the page's own host so it works both
+    // locally (ws://localhost:8000) and when deployed (wss://your-app.onrender.com).
+    // On localhost with no explicit port we fall back to :8000 (the backend).
+    const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const host  = isLocal ? `${location.hostname}:8000` : location.host;
+    const url   = `${proto}//${host}/ws/stream`;
     ws = new WebSocket(url);
 
     ws.onopen = () => {
